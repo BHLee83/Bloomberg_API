@@ -1,6 +1,4 @@
-﻿import pymysql
-import json
-
+﻿from DB.dbconn import mysqlDB
 from datetime import datetime
 
 import blpapi
@@ -30,53 +28,27 @@ def parseCmdLine():
 
     return options
 
-def db_connect():
-    
-    conn = pymysql.connect(
-            host='172.22.30.56', 
-            port=3306, 
-            user='root', 
-            passwd='9999',
-            db='',
-            charset='utf8')
-    
-    return conn;
-    
 
-def db_close(conn):
-    
-    if conn:
-        conn.close()
-
-    
-def getTickerList(conn):
+def getTickerList(db):
 
     try:    
-        curr = conn.cursor()
-        
-        curr.execute("SELECT TickerName, Description FROM ficc.bloomberg_tickers WHERE IsUsed = 'Y'")
-        
-        ret = curr.fetchall()
-
+        sqlstr = "select TickerName, Description from ts.bloomberg_tickers where IsUsed='Y'"
+        ret = db.query(sqlstr)
         return ret
 
     except Exception as e:
+        print ('In getTickerList, {}'.format(e))
         raise e
-        
-    finally:
-
-        if curr:
-            curr.close()
     
 
-def insertTickerRT(conn, ticker_list, bdp_list):
+def insertTickerRT(db, ticker_list, bdp_list):
     
     sql_del = """
-        DELETE FROM ficc.raw_bloomberg WHERE DateStr = %(date_str)s
+        DELETE FROM ts.market_data_blg_raw WHERE DateStr = %(date_str)s
         """
         
     sql_ins = """
-        INSERT INTO ficc.raw_bloomberg (
+        INSERT INTO ts.market_data_blg_raw (
             DateStr,
             Ticker,
             Tag,
@@ -95,14 +67,11 @@ def insertTickerRT(conn, ticker_list, bdp_list):
         
         
     try:    
-
-        curr = conn.cursor()
-
         params = {
             'date_str': '9999-99-99'
         }
         
-        curr.execute(sql_del, params)
+        db.execute(sql_del, params)
 
         for bdp in bdp_list:
             if bdp['value'] is not None and type(bdp['value']) in (float, int):
@@ -117,21 +86,15 @@ def insertTickerRT(conn, ticker_list, bdp_list):
                     'value': bdp['value']
                 }
                 
-                curr.execute(sql_ins, params)
+                db.execute(sql_ins, params)
                 
-        conn.commit()
+        db.commit()
         
         return 0
 
     except Exception as e:
+        print('In insertTickerRT, {}'.format(e))
         raise e
-        
-    finally:
-        
-        if curr:
-            curr.close()
-
-
    
 
 def main():
@@ -161,17 +124,13 @@ def main():
     refDataService = session.getService("//blp/refdata")
     request = refDataService.createRequest("ReferenceDataRequest")
 
-    conn = db_connect()
+    db = mysqlDB('ts')
     
-    ticker_list = getTickerList(conn)
+    ticker_list = getTickerList(db)
     
     # append securities to request
     for ticker_info in ticker_list:
         request.append("securities", ticker_info[0])
-        
-
-
-
 
     # append fields to request
     request.append("fields", "PX_LAST")
@@ -220,14 +179,14 @@ def main():
                 break
             
         
-        insertTickerRT(conn, ticker_list, bdp_list)
+        insertTickerRT(db, ticker_list, bdp_list)
 
 
 
     finally:
         # Stop the session
         session.stop()
-        db_close(conn)
+        db.close()
 
 if __name__ == "__main__":
 
@@ -250,9 +209,3 @@ if __name__ == "__main__":
     finally:
         print ('Ok.. good job, bye')
         print ('###########################################################')
-        # to-do : notify by slack
-
-
-__copyright__ = """
-NO RITGHT.
-"""

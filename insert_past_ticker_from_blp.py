@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from DB.dbconn import mysqlDB
-import pymysql
 import blpapi
 
 from optparse import OptionParser
@@ -12,7 +11,7 @@ import socket
 
 today = datetime.today()
 yesterday = today + timedelta(days=-1)
-bef_7days = today + timedelta(days=-1)
+bef_7days = today + timedelta(days=-7)
 
 proc_date = today.strftime('%Y-%m-%d')
 proc_time = today.strftime('%H%M%S%f')
@@ -52,8 +51,7 @@ def parseCmdLine():
 def getTickerList(db):
 
     try:
-        sqlstr = ''
-        sqlstr = "select TickerName, Description from ficc.bloomberg_tickers where IsUsed='Y'"
+        sqlstr = "select TickerName, Description from ts.bloomberg_tickers where IsUsed='Y'"
         ret = db.query(sqlstr)
         return ret
 
@@ -61,10 +59,6 @@ def getTickerList(db):
         print ('In getTickerList, {}'.format(e))
         raise e
     
-    finally:
-        if db.cursor():
-            db.close()
-
 
 def insertTickerRT(db, bdp_list):
 
@@ -73,7 +67,7 @@ def insertTickerRT(db, bdp_list):
         select
             *
         from
-            ficc.raw_bloomberg as a
+            ts.market_data_blg_raw as a
         where 1=1
             and a.DateStr = %(datestr)s
             and a.Ticker = %(ticker)s
@@ -83,7 +77,7 @@ def insertTickerRT(db, bdp_list):
 
     sql_ins = ("""
 
-        insert into ficc.raw_bloomberg (
+        insert into ts.market_data_blg_raw (
             DateStr,
             Ticker,
             Tag,
@@ -129,10 +123,6 @@ def insertTickerRT(db, bdp_list):
     except Exception as e:
         print('In insertTickerRT, {}'.format(e))
         raise e
-
-    finally:
-        if db.cursor():
-            db.close()
 
 
 def main():
@@ -248,10 +238,6 @@ def main():
         # Stop the session
         session.stop()
         db.close()
-
-
-
-
 
 
 if __name__ == '__main__':

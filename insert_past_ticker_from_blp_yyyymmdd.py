@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import pymysql
+from DB.dbconn import mysqlDB
 import blpapi
 
 from optparse import OptionParser
@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import socket
 
 
-today = datetime(2020, 12, 30)
+today = datetime(2024, 7, 2)
 yesterday = today + timedelta(days=-1)
 bef_7days = today + timedelta(days=-1)
 
@@ -48,55 +48,26 @@ def parseCmdLine():
     return options
 
 
-
-def db_connect():
-
-    conn = pymysql.connect(
-            host='172.22.30.56',
-            port=3306,
-            user='root',
-            passwd='9999',
-            charset='utf8')
-
-    return conn
-
-
-def db_close(conn):
-    if conn:
-        conn.close()
-
-
-def getTickerList(conn):
+def getTickerList(db):
 
     try:
-        curr = conn.cursor()
-
-        sqlstr = ''
-        sqlstr = "select TickerName, Description from ficc.bloomberg_tickers where IsUsed='Y'"
-
-        curr.execute(sqlstr)
-
-        ret = curr.fetchall()
+        sqlstr = "select TickerName, Description from ts.bloomberg_tickers where IsUsed='Y'"
+        ret = db.query(sqlstr)
         return ret
 
     except Exception as e:
         print ('In getTickerList, {}'.format(e))
         raise e
 
-    finally:
 
-        if curr:
-            curr.close()
-
-
-def insertTickerRT(conn, bdp_list):
+def insertTickerRT(db, bdp_list):
 
     sql_exists = ("""
 
         select
             *
         from
-            ficc.raw_bloomberg as a
+            ts.market_data_blg_raw as a
         where 1=1
             and a.DateStr = %(datestr)s
             and a.Ticker = %(ticker)s
@@ -106,7 +77,7 @@ def insertTickerRT(conn, bdp_list):
 
     sql_ins = ("""
 
-        insert into ficc.raw_bloomberg (
+        insert into ts.market_data_blg_raw (
             DateStr,
             Ticker,
             Tag,
@@ -124,9 +95,6 @@ def insertTickerRT(conn, bdp_list):
 
     try:
 
-        curr = conn.cursor()
-
-
         for bdp in bdp_list:
             if bdp['value'] is not None:
 
@@ -135,7 +103,7 @@ def insertTickerRT(conn, bdp_list):
                     'ticker': bdp['security'],
                     'tag': bdp['tag'],
                 }
-                numrows = curr.execute(sql_exists, params)
+                numrows = db.execute(sql_exists, params)
 
                 if numrows > 0:
                     print('It is already inserted. {}'.format(bdp))
@@ -148,17 +116,13 @@ def insertTickerRT(conn, bdp_list):
                     'description': bdp['description'],
                     'value': bdp['value'],
                 }
-                curr.execute(sql_ins, params)
+                db.execute(sql_ins, params)
 
-        conn.commit()
+        db.commit()
 
     except Exception as e:
         print('In insertTickerRT, {}'.format(e))
         raise e
-
-    finally:
-        if curr:
-            curr.close()
 
 
 def main():
@@ -193,9 +157,9 @@ def main():
         request = refDataService.createRequest('HistoricalDataRequest')
 
 
-        conn = db_connect()
+        db = mysqlDB('ts')
 
-        ticker_list = getTickerList(conn)
+        ticker_list = getTickerList(db)
         tag_list = ['PX_LAST','PX_OPEN','PX_HIGH','PX_LOW']
         ticker_desc = {}
 
@@ -263,7 +227,7 @@ def main():
 
 
         print (bdp_list)
-        insertTickerRT(conn, bdp_list)
+        insertTickerRT(db, bdp_list)
 
 
     except Exception as e:
@@ -273,7 +237,7 @@ def main():
     finally:
         # Stop the session
         session.stop()
-        db_close(conn)
+        db.close()
 
 
 
